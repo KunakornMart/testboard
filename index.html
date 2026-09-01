@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>MTS BrainSpace — Ideas · Explore · Decide · Build</title>
+    <meta name="description" content="MTS BrainSpace — บอร์ดระดมสมองออนไลน์ของทีม MTS Gold Group คิดด้วยกันแบบเรียลไทม์" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2b4d'/%3E%3Cpath d='M32 10l6 16 16 6-16 6-6 16-6-16-16-6 16-6z' fill='%23e2b64e'/%3E%3C/svg%3E" />
+    <script>
+      (function () {
+        try {
+          var s = JSON.parse(localStorage.getItem("mts-brainspace-v1") || "{}");
+          var t = s.theme || "system";
+          var dark = t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
+    <style>
+      /* โหลดฟอนต์แบบไม่บลอคการวาดหน้าแรก — ถ้าฟอนต์มาช้าใช้ fallback ไปก่อน */
+      html, body { margin: 0; height: 100%; background: #edeee8; }
+      html[data-theme="dark"], html[data-theme="dark"] body { background: #0b111e; }
+      #root:empty::before {
+        content: ""; position: fixed; inset: 0;
+        background:
+          radial-gradient(800px 500px at 85% -10%, rgba(201, 155, 46, 0.14), transparent 70%),
+          radial-gradient(700px 500px at -10% 110%, rgba(27, 43, 77, 0.16), transparent 70%);
+      }
+      #boot {
+        position: fixed; inset: 0; display: flex; flex-direction: column; gap: 18px;
+        align-items: center; justify-content: center;
+        font-family: "Prompt", "Anuphan", "Segoe UI", system-ui, sans-serif;
+        color: #212a3c; z-index: 5;
+        background:
+          radial-gradient(800px 500px at 85% -10%, rgba(201, 155, 46, 0.16), transparent 70%),
+          radial-gradient(700px 500px at -10% 110%, rgba(27, 43, 77, 0.18), transparent 70%);
+      }
+      html[data-theme="dark"] #boot { color: #e9edf6; }
+      #boot .mark {
+        width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(150deg, #22375f, #16233f);
+        box-shadow: 0 10px 30px rgba(22, 35, 63, 0.4), inset 0 0 0 2px rgba(226, 182, 78, 0.55);
+        animation: boot-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both, boot-bob 1.6s 0.5s ease-in-out infinite;
+      }
+      #boot .t1 { font-weight: 800; font-size: 21px; letter-spacing: 0.2px; }
+      #boot .t1 b { color: #c99b2e; }
+      #boot .t2 { font-size: 12.5px; font-weight: 600; opacity: 0.6; margin-top: -10px; }
+      #boot .dots { display: flex; gap: 7px; }
+      #boot .dots i {
+        width: 9px; height: 9px; border-radius: 3px; display: block;
+        animation: boot-dot 1s ease-in-out infinite;
+      }
+      #boot .dots i:nth-child(1) { background: #ffe06b; }
+      #boot .dots i:nth-child(2) { background: #a9e8c5; animation-delay: 0.15s; }
+      #boot .dots i:nth-child(3) { background: #a5d8f6; animation-delay: 0.3s; }
+      #boot .dots i:nth-child(4) { background: #ffb59e; animation-delay: 0.45s; }
+      @keyframes boot-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      @keyframes boot-bob { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
+      @keyframes boot-dot { 0%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 40% { transform: translateY(-7px) scale(1.15); opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot">
+        <div class="mark">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6L12 2z" fill="#e2b64e"/></svg>
+        </div>
+        <div class="t1">MTS <b>BrainSpace</b></div>
+        <div class="t2">กำลังเปิดบอร์ดระดมสมองของทีม…</div>
+        <div class="dots"><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      /* ฟอนต์แบบ async — ไม่บลอค first paint */
+      (function () {
+        var l = document.createElement("link");
+        l.rel = "stylesheet";
+        l.href = "https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=Prompt:wght@500;600;700;800&display=swap";
+        l.media = "print";
+        l.onload = function () { this.media = "all"; };
+        document.head.appendChild(l);
+        var p1 = document.createElement("link"); p1.rel = "preconnect"; p1.href = "https://fonts.googleapis.com";
+        var p2 = document.createElement("link"); p2.rel = "preconnect"; p2.href = "https://fonts.gstatic.com"; p2.crossOrigin = "anonymous";
+        document.head.appendChild(p1); document.head.appendChild(p2);
+      })();
+      /* ถ้า JS ไม่มาภายใน 8 วิ แจ้งผู้ใช้แทนจอขาว */
+      setTimeout(function () {
+        if (document.getElementById("boot")) {
+          var t2 = document.querySelector("#boot .t2");
+          if (t2) t2.textContent = "โหลดช้ากว่าปกติ — เช็คการเชื่อมต่อแล้วลอง refresh อีกครั้ง";
+        }
+      }, 8000);
+    </script>
+  </body>
+</html>
