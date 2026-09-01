@@ -9,7 +9,7 @@ import {
 import type { Board, Connector, Frame, Item, ItemKind, Peer, Project, Stroke, User } from "../types";
 import { CONNECTOR_COLORS, DRAW_COLORS, EMOJIS, FRAME_COLORS, KIND_META, PASTELS, VIS_META, uid } from "../data";
 import {
-  addBotPeer, addLog, announcePresence, canEdit, canManage, currentUser, deleteProject, getState, onRemoteLog,
+  addBotPeer, addLog, announcePresence, canEdit, canManage, currentUser, deleteProject, emptyBoard, getState, onRemoteLog,
   removeBotPeer, sendChat, setBoard, timeAgo, updateProject, useApp, usePeers,
 } from "../store";
 import { Avatar, Confirm, Menu, toast } from "../ui";
