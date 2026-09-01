@@ -50,6 +50,44 @@ function edgePoint(it: { x: number; y: number; w: number; h: number }, tx: numbe
   return { x: cx + dx * s, y: cy + dy * s };
 }
 
+/* ---------- connector geometry (ใช้ทั้งบน canvas และ exporter) ---------- */
+export type Rect = { x: number; y: number; w: number; h: number };
+export type Side = "n" | "e" | "s" | "w";
+export const sidePoint = (it: Rect, side: Side) =>
+  side === "n" ? { x: it.x + it.w / 2, y: it.y }
+  : side === "s" ? { x: it.x + it.w / 2, y: it.y + it.h }
+  : side === "e" ? { x: it.x + it.w, y: it.y + it.h / 2 }
+  : { x: it.x, y: it.y + it.h / 2 };
+export const sideVec = (side: Side) =>
+  side === "n" ? { x: 0, y: -1 } : side === "s" ? { x: 0, y: 1 } : side === "e" ? { x: 1, y: 0 } : { x: -1, y: 0 };
+export function nearestSide(it: Rect, p: { x: number; y: number }): Side {
+  let best: Side = "n", bd = Infinity;
+  (["n", "e", "s", "w"] as Side[]).forEach((s) => {
+    const m = sidePoint(it, s);
+    const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2;
+    if (d < bd) { bd = d; best = s; }
+  });
+  return best;
+}
+export function connectorGeometry(a: Rect, b: Rect, conn: { fromSide?: Side; toSide?: Side }) {
+  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  const norm = (v: { x: number; y: number }) => {
+    const l = Math.hypot(v.x, v.y);
+    return l ? { x: v.x / l, y: v.y / l } : { x: 0, y: -1 };
+  };
+  const p1 = conn.fromSide ? sidePoint(a, conn.fromSide) : edgePoint(a, bc.x, bc.y);
+  const v1 = conn.fromSide ? sideVec(conn.fromSide) : norm({ x: p1.x - ac.x, y: p1.y - ac.y });
+  const p2 = conn.toSide ? sidePoint(b, conn.toSide) : edgePoint(b, ac.x, ac.y);
+  const v2 = conn.toSide ? sideVec(conn.toSide) : norm({ x: p2.x - bc.x, y: p2.y - bc.y });
+  const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  const k = Math.max(34, Math.min(150, dist * 0.45));
+  const c1 = { x: p1.x + v1.x * k, y: p1.y + v1.y * k };
+  const c2 = { x: p2.x + v2.x * k, y: p2.y + v2.y * k };
+  const mid = { x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8, y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8 };
+  return { d: `M${p1.x},${p1.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${p2.x},${p2.y}`, p1, p2, c1, c2, mid };
+}
+
 function strokePath(ctx: CanvasRenderingContext2D, pts: number[]) {
   ctx.beginPath();
   ctx.moveTo(pts[0], pts[1]);
@@ -140,31 +178,26 @@ export async function renderBoard(board: Board, project: Project | null, opts: E
   for (const c of board.connectors) {
     const a = byId.get(c.from), b = byId.get(c.to);
     if (!a || !b) continue;
-    const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-    const p1 = edgePoint(a, bc.x, bc.y), p2 = edgePoint(b, ac.x, ac.y);
-    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    const g = connectorGeometry(a, b, c);
     ctx.save();
     ctx.strokeStyle = c.color; ctx.lineWidth = 2.4; ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.quadraticCurveTo(mx + (p2.y - p1.y) * 0.12, my - (p2.x - p1.x) * 0.12, p2.x, p2.y);
-    ctx.stroke();
-    const ang = Math.atan2(p2.y - my, p2.x - mx);
+    ctx.stroke(new Path2D(g.d));
+    const ang = Math.atan2(g.p2.y - g.c2.y, g.p2.x - g.c2.x);
     ctx.fillStyle = c.color;
     ctx.beginPath();
-    ctx.moveTo(p2.x, p2.y);
-    ctx.lineTo(p2.x - 13 * Math.cos(ang - 0.42), p2.y - 13 * Math.sin(ang - 0.42));
-    ctx.lineTo(p2.x - 13 * Math.cos(ang + 0.42), p2.y - 13 * Math.sin(ang + 0.42));
+    ctx.moveTo(g.p2.x, g.p2.y);
+    ctx.lineTo(g.p2.x - 13 * Math.cos(ang - 0.42), g.p2.y - 13 * Math.sin(ang - 0.42));
+    ctx.lineTo(g.p2.x - 13 * Math.cos(ang + 0.42), g.p2.y - 13 * Math.sin(ang + 0.42));
     ctx.closePath(); ctx.fill();
     if (c.label) {
       ctx.font = `600 12px Anuphan, sans-serif`;
       const tw = ctx.measureText(c.label).width;
       ctx.fillStyle = bg;
-      roundedRect(ctx, mx - tw / 2 - 8, my - 12, tw + 16, 22, 8); ctx.fill();
+      roundedRect(ctx, g.mid.x - tw / 2 - 8, g.mid.y - 12, tw + 16, 22, 8); ctx.fill();
       ctx.strokeStyle = c.color; ctx.lineWidth = 1.4;
-      roundedRect(ctx, mx - tw / 2 - 8, my - 12, tw + 16, 22, 8); ctx.stroke();
+      roundedRect(ctx, g.mid.x - tw / 2 - 8, g.mid.y - 12, tw + 16, 22, 8); ctx.stroke();
       ctx.fillStyle = ink;
-      ctx.fillText(c.label, mx - tw / 2, my + 3.5);
+      ctx.fillText(c.label, g.mid.x - tw / 2, g.mid.y + 3.5);
     }
     ctx.restore();
   }

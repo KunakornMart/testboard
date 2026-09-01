@@ -98,12 +98,16 @@ export interface Stroke {
   points: number[]; // [x0,y0,x1,y1,...]
 }
 
+export type Side = "n" | "e" | "s" | "w";
+
 export interface Connector {
   id: string;
   from: string;
   to: string;
   color: string;
   label?: string;
+  fromSide?: Side;
+  toSide?: Side;
 }
 
 export interface Board {

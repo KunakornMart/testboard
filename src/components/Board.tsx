@@ -13,12 +13,27 @@ import {
   removeBotPeer, sendChat, setBoard, timeAgo, updateProject, useApp, usePeers,
 } from "../store";
 import { Avatar, Confirm, Menu, toast } from "../ui";
-import { computeBounds } from "../exporter";
+import { computeBounds, connectorGeometry, sidePoint, nearestSide, sideVec } from "../exporter";
+import type { Side } from "../exporter";
 import { CardDrawer, ActivityDrawer, ShareModal, ExportModal, ShortcutsModal } from "./BoardPanels";
 
 type Tool = "select" | "hand" | "sticky" | "text" | "shape" | "frame" | "pen" | "marker" | "pencil" | "eraser" | "connector" | "emoji";
 type View = { x: number; y: number; zoom: number };
 const clampZoom = (z: number) => Math.min(3.5, Math.max(0.15, z));
+const TOOL_HINTS: Record<Tool, string> = {
+  select: "ดับเบิลคลิกที่ว่าง = สติ๊กกี้ · ลากจุด ● ที่ขอบกล่อง = เชื่อมเส้น · Ctrl+ลาก = เลื่อน",
+  hand: "ลากเพื่อเลื่อนแคนวาส · Ctrl+Scroll = ซูม",
+  sticky: "คลิกบนแคนวาสเพื่อวางสติ๊กกี้",
+  text: "คลิกเพื่อวางข้อความ",
+  shape: "คลิกเพื่อวางรูปทรง · ลากจุด ● ระหว่างกล่องเพื่อสร้างโฟลว์",
+  frame: "ลากเป็นสี่เหลี่ยมเพื่อสร้างเฟรม",
+  pen: "ลากเมาส์ / นิ้ว / ปากกา เพื่อวาดเส้น",
+  marker: "ลากเพื่อไฮไลต์แบบโปร่งแสง",
+  pencil: "ลากเพื่อวาดเส้นดินสอ",
+  eraser: "ลากทับเส้นวาดเพื่อลบ",
+  connector: "คลิกการ์ดต้นทาง → คลิกการ์ดปลายทาง",
+  emoji: "คลิกบนแคนวาสเพื่อติดสติกเกอร์",
+};
 const hash = (s: string) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
 
 export default function BoardScreen({ projectId, onBack }: { projectId: string; onBack: () => void }) {
@@ -49,6 +64,8 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
   const [connLabel, setConnLabel] = useState<{ id: string; x: number; y: number } | null>(null);
   const [marquee, setMarquee] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [portDrag, setPortDrag] = useState<{ itemId: string; side: Side; x: number; y: number; targetId: string | null } | null>(null);
+  const [ctrlHeld, setCtrlHeld] = useState(false);
 
   /* ---------- panels ---------- */
   const [drawerId, setDrawerId] = useState<string | null>(null);
@@ -150,6 +167,7 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
       const t = e.target as HTMLElement;
       const typing = t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable;
       if (e.code === "Space" && !typing) { spaceRef.current = true; e.preventDefault(); }
+      if (e.key === "Control" || e.key === "Meta") setCtrlHeld(true);
       if (typing) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -168,10 +186,12 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
         if (map[e.key.toLowerCase()]) setTool(map[e.key.toLowerCase()]);
       }
     };
-    const up = (e: KeyboardEvent) => { if (e.code === "Space") spaceRef.current = false; };
+    const up = (e: KeyboardEvent) => { if (e.code === "Space") spaceRef.current = false; if (e.key === "Control" || e.key === "Meta") setCtrlHeld(false); };
+    const blur = () => { setCtrlHeld(false); spaceRef.current = false; };
+    window.addEventListener("blur", blur);
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
   });
 
   /* ---------- presence ---------- */
@@ -235,7 +255,8 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     const pan = () => { gesture.current = { mode: "pan", sx: e.clientX, sy: e.clientY, vx: viewRef.current.x, vy: viewRef.current.y }; };
-    if (e.button === 1 || spaceRef.current || toolRef.current === "hand") { pan(); return; }
+    // Ctrl/Meta + ลากเมาส์ = เลื่อนแคนวาส (สไตล์ Miro/FigJam/draw.io)
+    if (e.button === 1 || e.ctrlKey || e.metaKey || spaceRef.current || toolRef.current === "hand") { pan(); return; }
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current = { mode: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), z0: viewRef.current.zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, v0: { ...viewRef.current } };
@@ -298,6 +319,12 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
       return;
     }
     if (g.mode === "pan") { setView((v) => ({ ...v, x: g.vx + (e.clientX - g.sx), y: g.vy + (e.clientY - g.sy) })); return; }
+    if (g.mode === "portdrag") {
+      const target = hitItem(pt, g.itemId);
+      g.targetId = target?.id ?? null;
+      setPortDrag({ itemId: g.itemId, side: g.side, x: pt.x, y: pt.y, targetId: g.targetId });
+      return;
+    }
     if (g.mode === "marquee") { setMarquee({ x1: g.x, y1: g.y, x2: pt.x, y2: pt.y }); return; }
     if (g.mode === "newframe") { setMarquee({ x1: g.x, y1: g.y, x2: pt.x, y2: pt.y }); return; }
     if (g.mode === "draw") {
@@ -344,6 +371,24 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
     const g = gesture.current; gesture.current = null;
     if (!g) return;
     const pt = toBoard(e.clientX, e.clientY);
+    if (g.mode === "portdrag") {
+      setPortDrag(null);
+      const target = g.targetId ? boardRef.current.items.find((i) => i.id === g.targetId) : null;
+      if (target) {
+        const exists = boardRef.current.connectors.some((c) => c.from === g.itemId && c.to === target.id);
+        if (exists) { snapRef.current = null; toast("สองใบนี้เชื่อมกันอยู่แล้ว", "info", "🔗"); return; }
+        const conn: Connector = {
+          id: uid("CN"), from: g.itemId, to: target.id,
+          color: CONNECTOR_COLORS.includes(drawColor) ? drawColor : CONNECTOR_COLORS[0],
+          fromSide: g.side, toSide: nearestSide(target, pt),
+        };
+        mutate((b) => { b.connectors.push(conn); }, { history: true, log: { type: "CONNECTION_CREATED", text: "ลากเส้นเชื่อมต่อการ์ด 2 ใบ", objectId: conn.id } });
+        toast("เชื่อมต่อแล้ว 🔗 ดับเบิลคลิกที่เส้นเพื่อใส่ป้ายกำกับ", "ok");
+      } else {
+        snapRef.current = null; // ยกเลิก — ทิ้ง snapshot ที่จองไว้
+      }
+      return;
+    }
     if (g.mode === "marquee") {
       setMarquee(null);
       const [x1, x2] = [Math.min(g.x, pt.x), Math.max(g.x, pt.x)];
@@ -377,8 +422,31 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
   };
 
   /* ---------- item interactions ---------- */
+  /* ---------- ลากเส้นจากจุดต่อ (port) ---------- */
+  const hitItem = (pt: { x: number; y: number }, excludeId?: string): Item | null => {
+    const items = [...boardRef.current.items].sort((a, b) => b.z - a.z);
+    for (const i of items) {
+      if (i.id === excludeId) continue;
+      if (pt.x >= i.x - 6 && pt.x <= i.x + i.w + 6 && pt.y >= i.y - 6 && pt.y <= i.y + i.h + 6) return i;
+    }
+    return null;
+  };
+
+  const onPortDown = (e: React.PointerEvent, it: Item, side: Side) => {
+    if (readOnly) return;
+    e.stopPropagation();
+    e.preventDefault();
+    viewportRef.current!.setPointerCapture(e.pointerId);
+    takeSnap();
+    const pt = toBoard(e.clientX, e.clientY);
+    gesture.current = { mode: "portdrag", itemId: it.id, side, targetId: null };
+    setPortDrag({ itemId: it.id, side, x: pt.x, y: pt.y, targetId: null });
+  };
+
   const onItemDown = (e: React.PointerEvent, it: Item) => {
     if (readOnly) return;
+    // Ctrl/Space ค้าง = เลื่อนแคนวาส — ปล่อยให้ event ลอยขึ้นไปยังแคนวาส
+    if (e.ctrlKey || e.metaKey || spaceRef.current || toolRef.current === "hand") return;
     e.stopPropagation();
     if (e.button === 2) { setCtxMenu({ x: e.clientX, y: e.clientY, itemId: it.id }); return; }
     const t = toolRef.current;
@@ -500,11 +568,11 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
   const sortedItems = [...board.items].sort((a, b) => a.z - b.z);
   const sortedFrames = [...board.frames].sort((a, b) => a.z - b.z);
   const onlinePeers = peers;
-  const cursorCls = spaceRef.current || tool === "hand" ? "board-cursor-grab" : tool === "select" ? "" : "cursor-crosshair";
+  const cursorCls = ctrlHeld || spaceRef.current || tool === "hand" ? "board-cursor-grab" : tool === "select" ? "" : "cursor-crosshair";
 
   const tools: { id: Tool; icon: any; label: string; key?: string; ro?: boolean }[] = [
     { id: "select", icon: MousePointer2, label: "เลือก / ลาก", key: "V" },
-    { id: "hand", icon: Hand, label: "เลื่อนแคนวาส", key: "H" },
+    { id: "hand", icon: Hand, label: "เลื่อนแคนวาส · หรือ Ctrl/Space ค้างแล้วลาก", key: "H" },
     { id: "sticky", icon: StickyNote, label: "สติ๊กกี้", key: "S" },
     { id: "text", icon: Type, label: "ข้อความ", key: "T" },
     { id: "shape", icon: Shapes, label: "รูปทรง / โฟลว์ชาร์ต", key: "X" },
@@ -642,19 +710,18 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
             {board.connectors.map((c) => {
               const a = board.items.find((i) => i.id === c.from), b = board.items.find((i) => i.id === c.to);
               if (!a || !b) return null;
-              const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-              const p1 = edgePoint(a, bc.x, bc.y), p2 = edgePoint(b, ac.x, ac.y);
-              const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+              const g = connectorGeometry(a, b, c);
               return (
                 <g key={c.id} style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onClick={(e) => { e.stopPropagation(); setSelConn(c.id); setSel(new Set()); setSelFrame(null); }}
-                  onDoubleClick={(e) => { e.stopPropagation(); const r = viewportRef.current!.getBoundingClientRect(); setConnLabel({ id: c.id, x: r.left + mx * view.zoom + view.x, y: r.top + my * view.zoom + view.y }); }}>
-                  <path d={`M${p1.x},${p1.y} Q${mx + (p2.y - p1.y) * 0.12},${my - (p2.x - p1.x) * 0.12} ${p2.x},${p2.y}`} fill="none" stroke="transparent" strokeWidth={16} />
-                  <path d={`M${p1.x},${p1.y} Q${mx + (p2.y - p1.y) * 0.12},${my - (p2.x - p1.x) * 0.12} ${p2.x},${p2.y}`} fill="none"
+                  onDoubleClick={(e) => { e.stopPropagation(); const r = viewportRef.current!.getBoundingClientRect(); setConnLabel({ id: c.id, x: r.left + g.mid.x * view.zoom + view.x, y: r.top + g.mid.y * view.zoom + view.y }); }}>
+                  <path d={g.d} fill="none" stroke="transparent" strokeWidth={18} />
+                  <path d={g.d} fill="none"
                     stroke={c.color} strokeWidth={selConn === c.id ? 3.6 : 2.4} markerEnd={`url(#ar-${c.color.slice(1)})`}
-                    className={selConn === c.id ? "dash-march" : ""} strokeDasharray={selConn === c.id ? "7 7" : undefined} />
+                    className={selConn === c.id ? "dash-march" : ""} strokeDasharray={selConn === c.id ? "7 7" : undefined}
+                    style={{ transition: "stroke-width .15s" }} />
                   {c.label && (
-                    <text x={mx} y={my - 8} textAnchor="middle" fontSize={12.5} fontWeight={700} fill={c.color}
+                    <text x={g.mid.x} y={g.mid.y - 9} textAnchor="middle" fontSize={12.5} fontWeight={700} fill={c.color}
                       style={{ paintOrder: "stroke", stroke: "var(--canvas)", strokeWidth: 5, fontFamily: "Anuphan, sans-serif" }}>{c.label}</text>
                   )}
                 </g>
@@ -665,14 +732,38 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
           {/* items */}
           {sortedItems.map((it) => (
             <ItemView key={it.id} it={it} selected={sel.has(it.id)} single={sel.size === 1 && sel.has(it.id)}
-              pending={pendingFrom === it.id} editing={editing?.id === it.id ? editing.field : null}
+              pending={pendingFrom === it.id} portTarget={portDrag?.targetId === it.id}
+              editing={editing?.id === it.id ? editing.field : null}
               meId={me.id} zoom={view.zoom} readOnly={readOnly}
               onDown={(e) => onItemDown(e, it)} onResize={(e, c) => startResize(e, it, c)}
+              onPortDown={(e, side) => onPortDown(e, it, side)}
               onDbl={(field) => !readOnly && setEditing({ id: it.id, field })}
               onCtx={(e) => { setCtxMenu({ x: e.clientX, y: e.clientY, itemId: it.id }); }}
               onVote={() => vote(it)} onCommit={(f, v) => commitText(it.id, f, v)}
               onOpen={() => setDrawerId(it.id)} />
           ))}
+
+          {/* เส้นชั่วคราวระหว่างลากจากจุดต่อ */}
+          {portDrag && (() => {
+            const src = board.items.find((i) => i.id === portDrag.itemId);
+            if (!src) return null;
+            const p1 = sidePoint(src, portDrag.side);
+            const target = portDrag.targetId ? board.items.find((i) => i.id === portDrag.targetId) : null;
+            const tSide = target ? nearestSide(target, { x: portDrag.x, y: portDrag.y }) : null;
+            const end = target && tSide ? sidePoint(target, tSide) : { x: portDrag.x, y: portDrag.y };
+            const dist = Math.hypot(end.x - p1.x, end.y - p1.y);
+            const k = Math.max(30, Math.min(130, dist * 0.45));
+            const v1 = sideVec(portDrag.side);
+            const v2 = tSide ? sideVec(tSide) : { x: 0, y: -1 };
+            const d = `M${p1.x},${p1.y} C${p1.x + v1.x * k},${p1.y + v1.y * k} ${end.x + v2.x * k},${end.y + v2.y * k} ${end.x},${end.y}`;
+            return (
+              <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: 10, height: 10, zIndex: 60 }}>
+                <path d={d} fill="none" stroke="var(--gold)" strokeWidth={2.6} strokeDasharray="7 6" className="dash-march" strokeLinecap="round" />
+                <circle cx={end.x} cy={end.y} r={5} fill="var(--gold)" />
+                <circle cx={end.x} cy={end.y} r={10} fill="none" stroke="var(--gold)" strokeWidth={1.5} opacity={0.5} className="ring-ping" style={{ transformOrigin: `${end.x}px ${end.y}px` }} />
+              </svg>
+            );
+          })()}
 
           {/* marquee / new frame preview */}
           {marquee && (
@@ -687,13 +778,21 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
           {onlinePeers.filter((p) => p.cursor).map((p) => <RemoteCursor key={p.tabId} peer={p} zoom={view.zoom} />)}
         </div>
 
+        {/* hint chip ตามเครื่องมือที่เลือก */}
+        {!readOnly && (
+          <div key={tool} className="absolute left-4 z-30 chip !py-1.5 hidden md:inline-flex fade-up"
+            style={{ bottom: 26, background: "color-mix(in srgb, var(--panel) 88%, transparent)", color: "var(--muted)", boxShadow: "var(--shadow-sm)" }}>
+            💡 {TOOL_HINTS[tool]}
+          </div>
+        )}
+
         {/* empty state */}
         {empty && !readOnly && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center fade-up pointer-events-auto">
               <div className="text-[42px] mb-2">💡</div>
               <div className="font-display font-bold text-[19px]">เริ่มจากความคิดแรก</div>
-              <p className="text-[13.5px] mt-1.5" style={{ color: "var(--muted)" }}>ดับเบิลคลิกที่ว่างเพื่อสร้างสติ๊กกี้ · ลากเพื่อเลือก · Scroll เพื่อเลื่อน · Ctrl+Scroll เพื่อซูม</p>
+              <p className="text-[13.5px] mt-1.5" style={{ color: "var(--muted)" }}>ดับเบิลคลิกที่ว่างเพื่อสร้างสติ๊กกี้ · ลากจุด ● ที่ขอบกล่องเพื่อเชื่อมเส้น · Ctrl+ลาก เพื่อเลื่อนแคนวาส</p>
               <div className="flex gap-2 justify-center mt-5">
                 <button className="btn btn-gold" onClick={() => { const it = makeItem({ type: "sticky", x: -95, y: -95, color: "#FFE06B" }); addItem(it, "สร้างสติ๊กกี้ใหม่"); setEditing({ id: it.id, field: "body" }); }}><StickyNote size={15} /> สติ๊กกี้แรก</button>
                 <button className="btn" onClick={() => setTool("pen")}><PenLine size={15} /> ลองวาดดู</button>
@@ -832,17 +931,22 @@ export default function BoardScreen({ projectId, onBack }: { projectId: string; 
 }
 
 /* ================= item view ================= */
-function ItemView({ it, selected, single, pending, editing, meId, zoom, readOnly, onDown, onResize, onDbl, onCtx, onVote, onCommit, onOpen }: {
-  it: Item; selected: boolean; single: boolean; pending: boolean; editing: "body" | "title" | null; meId: string; zoom: number; readOnly: boolean;
+function ItemView({ it, selected, single, pending, portTarget, editing, meId, zoom, readOnly, onDown, onResize, onPortDown, onDbl, onCtx, onVote, onCommit, onOpen }: {
+  it: Item; selected: boolean; single: boolean; pending: boolean; portTarget: boolean; editing: "body" | "title" | null; meId: string; zoom: number; readOnly: boolean;
   onDown: (e: React.PointerEvent) => void; onResize: (e: React.PointerEvent, corner: string) => void;
+  onPortDown: (e: React.PointerEvent, side: Side) => void;
   onDbl: (field: "body" | "title") => void; onCtx: (e: React.MouseEvent) => void; onVote: () => void;
   onCommit: (field: "body" | "title", v: string) => void; onOpen: () => void;
 }) {
   const meta = it.kind ? KIND_META[it.kind] : null;
   const rot = it.type === "sticky" ? ((hash(it.id) % 5) - 2) * 1.15 : 0;
   const [voting, setVoting] = useState(false);
+  const [hov, setHov] = useState(false);
   const myVote = it.votes.includes(meId);
   const inv = 1 / zoom;
+  const boxType = it.type === "shape" || it.type === "card" || it.type === "sticky";
+  const showPorts = boxType && !readOnly && (hov || selected || single || it.type === "shape");
+  const portsDim = it.type === "shape" && !hov && !selected;
 
   const ring = (selected || pending) && (
     <div className="absolute rounded-[10px] pointer-events-none" style={{ inset: -4, border: `2px solid ${pending ? "var(--info)" : "var(--gold)"}`, borderRadius: it.type === "sticky" ? 8 : 16 }} />
@@ -931,13 +1035,41 @@ function ItemView({ it, selected, single, pending, editing, meId, zoom, readOnly
         transform: rot ? `rotate(${rot}deg)` : undefined, zIndex: 10 + it.z,
       }}
       onPointerDown={onDown} onContextMenu={onCtx}
-      onClick={(e) => { if (it.type === "card" && e.detail === 1) { /* single click noop */ } }}>
-      <div className={`w-full h-full transition-shadow ${it.type === "sticky" ? "rounded-[7px] card-shadow" : it.type === "card" ? "rounded-[14px] card-shadow" : ""} ${selected ? "card-shadow-lift" : ""}`}
+      onPointerEnter={() => setHov(true)} onPointerLeave={() => setHov(false)}>
+      <div className={`w-full h-full transition-shadow ${it.type === "sticky" ? "rounded-[7px] card-shadow" : it.type === "card" ? "rounded-[14px] card-shadow" : ""} ${selected || hov ? "card-shadow-lift" : ""}`}
         style={{ background: it.type === "sticky" ? it.color : it.type === "card" ? "#fff" : "transparent", height: it.type === "text" ? undefined : "100%" }}>
         {body}
       </div>
       {ring}{handles}
       {pending && <div className="absolute rounded-[10px] pointer-events-none ring-ping" style={{ inset: -4, border: "2px solid var(--info)" }} />}
+      {portTarget && (
+        <div className="absolute rounded-[14px] pointer-events-none pop-in" style={{ inset: -7, border: "2.5px solid var(--info)", boxShadow: "0 0 0 5px color-mix(in srgb, var(--info) 22%, transparent)" }} />
+      )}
+      {/* จุดต่อ (ports) — ลากจากจุดหนึ่งไปอีกกล่องเพื่อเชื่อมเส้นได้เลย */}
+      {showPorts && (
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 40 }}>
+          {(["n", "e", "s", "w"] as Side[]).map((side) => (
+            <div key={side}
+              onPointerDown={(e) => onPortDown(e, side)}
+              onPointerEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = "scale(1.45)"; }}
+              onPointerLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
+              title="ลากไปยังอีกกล่องเพื่อเชื่อมลูกศร"
+              style={{
+                position: "absolute", pointerEvents: "auto",
+                width: 14, height: 14, borderRadius: "50%",
+                background: "var(--panel)", border: "2.5px solid var(--gold)",
+                boxShadow: "0 1px 5px rgba(0,0,0,.3)",
+                cursor: "crosshair",
+                opacity: portsDim ? 0.55 : 1,
+                transition: "transform .13s cubic-bezier(.2,.9,.3,1.4), opacity .15s",
+                ...(side === "n" ? { top: -8, left: "50%", marginLeft: -7 }
+                  : side === "s" ? { bottom: -8, left: "50%", marginLeft: -7 }
+                  : side === "e" ? { right: -8, top: "50%", marginTop: -7 }
+                  : { left: -8, top: "50%", marginTop: -7 }),
+              }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

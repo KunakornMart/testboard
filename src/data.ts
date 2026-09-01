@@ -149,21 +149,21 @@ export function seedState(): AppState {
   };
 
   const board2: Board = {
-    frames: [{ id: "FR-F1", x: -20, y: -60, w: 1200, h: 620, title: "Ticket Lifecycle", color: "#A5D8F6", z: 0 }],
+    frames: [{ id: "FR-F1", x: -60, y: -110, w: 1020, h: 1030, title: "Ticket Lifecycle", color: "#A5D8F6", z: 0 }],
     items: [
-      { id: "SH-1", type: "shape", shape: "ellipse", x: 20, y: 120, w: 190, h: 110, color: "#A9E8C5", title: "", body: "User เปิด Ticket", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
-      { id: "SH-2", type: "shape", shape: "rect", x: 300, y: 120, w: 190, h: 110, color: "#A5D8F6", title: "", body: "Auto classify ประเภท", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
-      { id: "SH-3", type: "shape", shape: "diamond", x: 580, y: 100, w: 220, h: 150, color: "#FFE06B", title: "", body: "AI ตอบได้เลย?", authorId: "U-GAME", authorName: "Game", authorColor: "#3f8f6b", votes: ["U-PLE"], tags: [], comments: [], versions: [], z: 2 },
-      { id: "SH-4", type: "shape", shape: "rect", x: 900, y: 20, w: 200, h: 110, color: "#A9E8C5", title: "", body: "ปิด Ticket อัตโนมัติ", authorId: "U-GAME", authorName: "Game", authorColor: "#3f8f6b", votes: [], tags: [], comments: [], versions: [], z: 2 },
-      { id: "SH-5", type: "shape", shape: "rect", x: 900, y: 220, w: 200, h: 110, color: "#FFB59E", title: "", body: "ส่งต่อทีมที่เกี่ยวข้อง", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
-      { id: "TX-F1", type: "text", x: 20, y: -30, w: 520, h: 40, color: "transparent", title: "", body: "Flow ใหม่ — เป้าหมาย first response < 5 นาที ⚡", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 1 },
+      { id: "SH-1", type: "shape", shape: "ellipse", x: 340, y: -10, w: 210, h: 115, color: "#A9E8C5", title: "", body: "User เปิด Ticket", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
+      { id: "SH-2", type: "shape", shape: "rect", x: 310, y: 200, w: 270, h: 120, color: "#A5D8F6", title: "", body: "Auto classify ประเภท", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
+      { id: "SH-3", type: "shape", shape: "diamond", x: 315, y: 425, w: 260, h: 170, color: "#FFE06B", title: "", body: "AI ตอบได้เลย?", authorId: "U-GAME", authorName: "Game", authorColor: "#3f8f6b", votes: ["U-PLE"], tags: [], comments: [], versions: [], z: 2 },
+      { id: "SH-4", type: "shape", shape: "rect", x: 40, y: 710, w: 250, h: 120, color: "#A9E8C5", title: "", body: "ปิด Ticket อัตโนมัติ 🎉", authorId: "U-GAME", authorName: "Game", authorColor: "#3f8f6b", votes: [], tags: [], comments: [], versions: [], z: 2 },
+      { id: "SH-5", type: "shape", shape: "rect", x: 600, y: 710, w: 250, h: 120, color: "#FFB59E", title: "", body: "ส่งต่อทีมที่เกี่ยวข้อง", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 2 },
+      { id: "TX-F1", type: "text", x: 20, y: -70, w: 560, h: 40, color: "transparent", title: "", body: "Flow ใหม่ — เป้าหมาย first response < 5 นาที ⚡", authorId: "U-PLE", authorName: "Ple", authorColor: "#b06ab0", votes: [], tags: [], comments: [], versions: [], z: 1 },
     ],
     strokes: [],
     connectors: [
-      { id: "CN-F1", from: "SH-1", to: "SH-2", color: "#4f7fb5" },
-      { id: "CN-F2", from: "SH-2", to: "SH-3", color: "#4f7fb5" },
-      { id: "CN-F3", from: "SH-3", to: "SH-4", color: "#37926c", label: "ใช่" },
-      { id: "CN-F4", from: "SH-3", to: "SH-5", color: "#cf5252", label: "ไม่ใช่" },
+      { id: "CN-F1", from: "SH-1", to: "SH-2", color: "#4f7fb5", fromSide: "s", toSide: "n" },
+      { id: "CN-F2", from: "SH-2", to: "SH-3", color: "#4f7fb5", fromSide: "s", toSide: "n" },
+      { id: "CN-F3", from: "SH-3", to: "SH-4", color: "#37926c", label: "ใช่", fromSide: "s", toSide: "n" },
+      { id: "CN-F4", from: "SH-3", to: "SH-5", color: "#cf5252", label: "ไม่ใช่", fromSide: "s", toSide: "n" },
     ],
   };
 
@@ -231,16 +231,24 @@ export function templateBoard(templateId: string, userId: string, userName: stri
     return { frames, items: [], strokes: [], connectors: [] };
   }
   if (templateId === "flow") {
+    const idStart = uid("SH"), idS1 = uid("SH"), idDec = uid("SH"), idYes = uid("SH"), idNo = uid("SH");
     return {
-      frames: [fr(0, -80, 1150, 560, "Process Flow", "#A5D8F6")],
+      frames: [fr(-60, -110, 980, 1040, "Process Flow", "#A5D8F6")],
       items: [
-        mk({ id: uid("SH"), type: "shape", shape: "ellipse", x: 20, y: 140, w: 200, h: 120, color: "#A9E8C5", body: "Start" }),
-        mk({ id: uid("SH"), type: "shape", shape: "rect", x: 330, y: 140, w: 200, h: 120, color: "#A5D8F6", body: "ขั้นตอนที่ 1" }),
-        mk({ id: uid("SH"), type: "shape", shape: "diamond", x: 640, y: 120, w: 230, h: 160, color: "#FFE06B", body: "ตัดสินใจ?" }),
-        mk({ id: uid("SH"), type: "shape", shape: "ellipse", x: 970, y: 140, w: 200, h: 120, color: "#FFB59E", body: "End" }),
+        mk({ id: idStart, type: "shape", shape: "ellipse", x: 330, y: -10, w: 200, h: 110, color: "#A9E8C5", body: "Start" }),
+        mk({ id: idS1, type: "shape", shape: "rect", x: 300, y: 195, w: 260, h: 120, color: "#A5D8F6", body: "ขั้นตอนที่ 1" }),
+        mk({ id: idDec, type: "shape", shape: "diamond", x: 305, y: 420, w: 250, h: 165, color: "#FFE06B", body: "ตัดสินใจ?" }),
+        mk({ id: idYes, type: "shape", shape: "rect", x: 40, y: 700, w: 240, h: 120, color: "#A9E8C5", body: "ทำต่อ ✔" }),
+        mk({ id: idNo, type: "shape", shape: "rect", x: 580, y: 700, w: 240, h: 120, color: "#FFB59E", body: "ย้อนกลับ ✖" }),
+        mk({ id: uid("TX"), type: "text", x: 20, y: 865, w: 620, h: 40, color: "transparent", body: "💡 ลากจากจุดต่อ ● ที่ขอบกล่อง ไปยังอีกกล่อง เพื่อเชื่อมเส้นได้เลย" }),
       ],
       strokes: [],
-      connectors: [],
+      connectors: [
+        { id: uid("CN"), from: idStart, to: idS1, color: "#4f7fb5", fromSide: "s", toSide: "n" },
+        { id: uid("CN"), from: idS1, to: idDec, color: "#4f7fb5", fromSide: "s", toSide: "n" },
+        { id: uid("CN"), from: idDec, to: idYes, color: "#37926c", label: "ใช่", fromSide: "s", toSide: "n" },
+        { id: uid("CN"), from: idDec, to: idNo, color: "#cf5252", label: "ไม่ใช่", fromSide: "s", toSide: "n" },
+      ],
     };
   }
   if (templateId === "retro") {
